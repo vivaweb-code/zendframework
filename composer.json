@@ -1,6 +1,6 @@
 {
-    "name": "zendframework/zendframework",
-    "description": "Zend Framework",
+    "name": "vivaweb/zendframework",
+    "description": "Vivaweb Zend Framework",
     "type": "metapackage",
     "keywords": [
         "framework",
