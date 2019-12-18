@@ -123,9 +123,9 @@ abstract class AbstractSql
             return vsprintf($specifications, $parameters);
         }
 
-        $parametersCount = count($parameters);
+        $parametersCount = is_array($parameters) ? count($parameters) : 0;
         foreach ($specifications as $specificationString => $paramSpecs) {
-            if ($parametersCount == count($paramSpecs)) {
+            if ($paramSpecs && $parametersCount == count($paramSpecs)) {
                 break;
             }
             unset($specificationString, $paramSpecs);
@@ -142,7 +142,7 @@ abstract class AbstractSql
             if (isset($paramSpecs[$position]['combinedby'])) {
                 $multiParamValues = array();
                 foreach ($paramsForPosition as $multiParamsForPosition) {
-                    $ppCount = count($multiParamsForPosition);
+                    $ppCount = is_array($multiParamsForPosition) ? count($multiParamsForPosition) : 0;
                     if (!isset($paramSpecs[$position][$ppCount])) {
                         throw new Exception\RuntimeException('A number of parameters (' . $ppCount . ') was found that is not supported by this specification');
                     }
@@ -150,7 +150,7 @@ abstract class AbstractSql
                 }
                 $topParameters[] = implode($paramSpecs[$position]['combinedby'], $multiParamValues);
             } elseif ($paramSpecs[$position] !== null) {
-                $ppCount = count($paramsForPosition);
+                $ppCount = is_array($paramsForPosition) ? count($paramsForPosition) : 0;
                 if (!isset($paramSpecs[$position][$ppCount])) {
                     throw new Exception\RuntimeException('A number of parameters (' . $ppCount . ') was found that is not supported by this specification');
                 }
