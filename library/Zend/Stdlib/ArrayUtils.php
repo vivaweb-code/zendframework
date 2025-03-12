@@ -10,6 +10,7 @@
 namespace Zend\Stdlib;
 
 use Traversable;
+use Zend\Stdlib\Exception\InvalidArgumentException;
 
 /**
  * Utility class for testing and manipulation of PHP arrays.
@@ -204,39 +205,26 @@ abstract class ArrayUtils
     public static function iteratorToArray($iterator, $recursive = true)
     {
         if (!is_array($iterator) && !$iterator instanceof Traversable) {
-            throw new Exception\InvalidArgumentException(__METHOD__ . ' expects an array or Traversable object');
+            throw new InvalidArgumentException(__METHOD__ . ' expects an array or Traversable object');
         }
 
         if (!$recursive) {
-            if (is_array($iterator)) {
-                return $iterator;
-            }
-
-            return iterator_to_array($iterator);
+            return is_array($iterator) ? $iterator : iterator_to_array($iterator);
         }
 
-        if (method_exists($iterator, 'toArray')) {
+        if (is_object($iterator) && method_exists($iterator, 'toArray')) {
             return $iterator->toArray();
         }
 
-        $array = array();
+        $array = [];
         foreach ($iterator as $key => $value) {
             if (is_scalar($value)) {
                 $array[$key] = $value;
-                continue;
+            } elseif (is_array($value) || $value instanceof Traversable) {
+                $array[$key] = static::iteratorToArray($value, true);
+            } else {
+                $array[$key] = $value;
             }
-
-            if ($value instanceof Traversable) {
-                $array[$key] = static::iteratorToArray($value, $recursive);
-                continue;
-            }
-
-            if (is_array($value)) {
-                $array[$key] = static::iteratorToArray($value, $recursive);
-                continue;
-            }
-
-            $array[$key] = $value;
         }
 
         return $array;

@@ -1,11 +1,4 @@
 <?php
-/**
- * Zend Framework (http://framework.zend.com/)
- *
- * @link      http://github.com/zendframework/zf2 for the canonical source repository
- * @copyright Copyright (c) 2005-2015 Zend Technologies USA Inc. (http://www.zend.com)
- * @license   http://framework.zend.com/license/new-bsd New BSD License
- */
 
 namespace Zend\Validator;
 
@@ -38,31 +31,30 @@ class Date extends AbstractValidator
      *
      * @var array
      */
-    protected $messageTemplates = array(
-        self::INVALID      => "Invalid type given. String, integer, array or DateTime expected",
+    protected $messageTemplates = [
+        self::INVALID      => "Invalid type given. String, integer, array, or DateTime expected",
         self::INVALID_DATE => "The input does not appear to be a valid date",
         self::FALSEFORMAT  => "The input does not fit the date format '%format%'",
-    );
+    ];
 
     /**
      * @var array
      */
-    protected $messageVariables = array(
+    protected $messageVariables = [
         'format' => 'format',
-    );
+    ];
 
     /**
      * @var string
      */
     protected $format = self::FORMAT_DEFAULT;
 
-
     /**
      * Sets validator options
      *
      * @param  string|array|Traversable $options OPTIONAL
      */
-    public function __construct($options = array())
+    public function __construct($options = [])
     {
         if ($options instanceof Traversable) {
             $options = iterator_to_array($options);
@@ -88,7 +80,7 @@ class Date extends AbstractValidator
     /**
      * Sets the format option
      *
-     * Format cannot be null.  It will always default to 'Y-m-d', even
+     * Format cannot be null. It will always default to 'Y-m-d', even
      * if null is provided.
      *
      * @param  string $format
@@ -97,7 +89,7 @@ class Date extends AbstractValidator
      */
     public function setFormat($format = self::FORMAT_DEFAULT)
     {
-        $this->format = (empty($format)) ? self::FORMAT_DEFAULT : $format;
+        $this->format = empty($format) ? self::FORMAT_DEFAULT : $format;
         return $this;
     }
 
@@ -128,13 +120,12 @@ class Date extends AbstractValidator
      */
     protected function convertToDateTime($param, $addErrors = true)
     {
-        // @TODO: when minimum dependency will be PHP 5.5, we can only keep check against DateTimeInterface
         if ($param instanceof DateTime || $param instanceof DateTimeInterface) {
             return $param;
         }
 
         $type = gettype($param);
-        if (!in_array($type, array('string', 'integer', 'array'))) {
+        if (!in_array($type, ['string', 'integer', 'array'])) {
             if ($addErrors) {
                 $this->error(self::INVALID);
             }
@@ -148,7 +139,7 @@ class Date extends AbstractValidator
     /**
      * Attempts to convert an integer into a DateTime object
      *
-     * @param  integer $value
+     * @param  int $value
      * @return bool|DateTime
      */
     protected function convertInteger($value)
@@ -167,10 +158,11 @@ class Date extends AbstractValidator
     {
         $date = DateTime::createFromFormat($this->format, $value);
 
-        // Invalid dates can show up as warnings (ie. "2007-02-99")
-        // and still return a DateTime object.
+        // Retrieve the last errors
         $errors = DateTime::getLastErrors();
-        if ($errors['warning_count'] > 0) {
+
+        // Check if there are errors or warnings
+        if ($errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
             if ($addErrors) {
                 $this->error(self::FALSEFORMAT);
             }
