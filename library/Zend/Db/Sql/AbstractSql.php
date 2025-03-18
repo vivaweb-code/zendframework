@@ -120,12 +120,19 @@ abstract class AbstractSql
     protected function createSqlFromSpecificationAndParameters($specifications, $parameters)
     {
         if (is_string($specifications)) {
+            if (!is_array($parameters)) {
+                $parameters = [$parameters];
+            }
             return vsprintf($specifications, $parameters);
         }
 
-		$parametersCount = is_array($parameters) ? count($parameters) : 0;
+        if (!is_array($parameters)) {
+            $parameters = [$parameters];
+        }
+
+        $parametersCount = count($parameters);
         foreach ($specifications as $specificationString => $paramSpecs) {
-			if ($paramSpecs && $parametersCount == count($paramSpecs)) {
+            if ($parametersCount == count($paramSpecs)) {
                 break;
             }
             unset($specificationString, $paramSpecs);
@@ -142,17 +149,23 @@ abstract class AbstractSql
             if (isset($paramSpecs[$position]['combinedby'])) {
                 $multiParamValues = array();
                 foreach ($paramsForPosition as $multiParamsForPosition) {
-					$ppCount = is_array($multiParamsForPosition) ? count($multiParamsForPosition) : 1;
+                    $ppCount = is_array($multiParamsForPosition) ? count($multiParamsForPosition) : 1;
                     if (!isset($paramSpecs[$position][$ppCount])) {
                         throw new Exception\RuntimeException('A number of parameters (' . $ppCount . ') was found that is not supported by this specification');
+                    }
+                    if (!is_array($multiParamsForPosition)) {
+                        $multiParamsForPosition = [$multiParamsForPosition];
                     }
                     $multiParamValues[] = vsprintf($paramSpecs[$position][$ppCount], $multiParamsForPosition);
                 }
                 $topParameters[] = implode($paramSpecs[$position]['combinedby'], $multiParamValues);
             } elseif ($paramSpecs[$position] !== null) {
-				$ppCount = is_array($paramsForPosition) ? count($paramsForPosition) : 1;
+                $ppCount = is_array($paramsForPosition) ? count($paramsForPosition) : 1;
                 if (!isset($paramSpecs[$position][$ppCount])) {
                     throw new Exception\RuntimeException('A number of parameters (' . $ppCount . ') was found that is not supported by this specification');
+                }
+                if (!is_array($paramsForPosition)) {
+                    $paramsForPosition = [$paramsForPosition];
                 }
                 $topParameters[] = vsprintf($paramSpecs[$position][$ppCount], $paramsForPosition);
             } else {
