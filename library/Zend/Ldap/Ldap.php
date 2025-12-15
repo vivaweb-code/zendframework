@@ -38,9 +38,12 @@ class Ldap
     protected $options = null;
 
     /**
-     * The raw LDAP extension resource.
+     * The raw LDAP connection handle.
      *
-     * @var resource
+     * Note: Since PHP 8.1 `ldap_connect` returns an instance of `LDAP\Connection`
+     * instead of a resource. Keep this untyped and accept both resource and object.
+     *
+     * @var resource|object|null
      */
     protected $resource = null;
 
@@ -93,15 +96,34 @@ class Ldap
     }
 
     /**
-     * @return resource The raw LDAP extension resource.
+     * @return resource|object The raw LDAP connection handle.
      */
     public function getResource()
     {
-        if (!is_resource($this->resource) || $this->boundUser === false) {
+        if (!$this->isLdapConnection($this->resource) || $this->boundUser === false) {
             $this->bind();
         }
 
         return $this->resource;
+    }
+
+    /**
+     * Detects whether the given value is a valid LDAP connection for both
+     * legacy (resource) and PHP >= 8.1 (LDAP\Connection object).
+     *
+     * @param mixed $connection
+     * @return bool
+     */
+    private function isLdapConnection($connection)
+    {
+        if (is_resource($connection)) {
+            return true;
+        }
+        // Avoid hard dependency on ext/ldap 8.1+ at compile time
+        if (is_object($connection) && class_exists('LDAP\\Connection') && is_a($connection, 'LDAP\\Connection')) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -603,7 +625,7 @@ class Ldap
             throw new Exception\LdapException(null, 'Invalid account filter');
         }
 
-        if (!is_resource($this->getResource())) {
+        if (!$this->isLdapConnection($this->getResource())) {
             $this->bind();
         }
 
@@ -633,7 +655,7 @@ class Ldap
      */
     public function disconnect()
     {
-        if (is_resource($this->resource)) {
+        if ($this->isLdapConnection($this->resource)) {
             ErrorHandler::start(E_WARNING);
             ldap_unbind($this->resource);
             ErrorHandler::stop();
@@ -721,7 +743,7 @@ class Ldap
         $resource = ($useUri) ? ldap_connect($this->connectString) : ldap_connect($host, $port);
         ErrorHandler::stop();
 
-        if (is_resource($resource) === true) {
+        if ($this->isLdapConnection($resource) === true) {
             $this->resource  = $resource;
             $this->boundUser = false;
 
@@ -808,7 +830,7 @@ class Ldap
             }
         }
 
-        if (!is_resource($this->resource)) {
+        if (!$this->isLdapConnection($this->resource)) {
             $this->connect();
         }
 
