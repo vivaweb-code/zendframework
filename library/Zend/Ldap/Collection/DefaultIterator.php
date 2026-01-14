@@ -13,6 +13,7 @@ use Countable;
 use Iterator;
 use Zend\Ldap;
 use Zend\Ldap\Exception;
+use Zend\Ldap\Handler;
 use Zend\Stdlib\ErrorHandler;
 
 /**
@@ -61,6 +62,28 @@ class DefaultIterator implements Iterator, Countable
     protected $attributeNameTreatment = self::ATTRIBUTE_TO_LOWER;
 
     /**
+     * This array holds a list of resources and sorting-values.
+     *
+     * Each result is represented by an array containing the keys <var>resource</var>
+     * which holds a resource of a result-item and the key <var>sortValue</var>
+     * which holds the value by which the array will be sorted.
+     *
+     * The resources will be filled on creating the instance and the sorting values
+     * on sorting.
+     *
+     * @var array
+     * @psalm-var array<array{resource: ResultEntry, sortValue: string}>
+     */
+    protected $entries = [];
+
+    /**
+     * The function to sort the entries by
+     *
+     * @var callable
+     */
+    protected $sortFunction;
+
+    /**
      * Constructor.
      *
      * @param  \Zend\Ldap\Ldap $ldap
@@ -80,6 +103,23 @@ class DefaultIterator implements Iterator, Countable
         if ($this->itemCount === false) {
             throw new Exception\LdapException($this->ldap, 'counting entries');
         }
+
+        $identifier = ldap_first_entry(
+            $ldap->getResource(),
+            $resultId
+        );
+
+        while (false !== $identifier) {
+            $this->entries[] = [
+                'resource'  => $identifier,
+                'sortValue' => '',
+            ];
+
+            $identifier = ldap_next_entry(
+                $ldap->getResource(),
+                $identifier
+            );
+        }
     }
 
     public function __destruct()
@@ -95,7 +135,7 @@ class DefaultIterator implements Iterator, Countable
     public function close()
     {
         $isClosed = false;
-        if (is_resource($this->resultId)) {
+        if (Handler::isResultHandle($this->resultId)) {
             ErrorHandler::start();
             $isClosed       = ldap_free_result($this->resultId);
             ErrorHandler::stop();
@@ -188,22 +228,18 @@ class DefaultIterator implements Iterator, Countable
      */
     public function current()
     {
-        if (!is_resource($this->current)) {
+        if (!Handler::isResultEntryHandle($this->current)) {
             $this->rewind();
         }
-        if (!is_resource($this->current)) {
+        if (!Handler::isResultEntryHandle($this->current)) {
             return null;
         }
 
-        $entry         = array('dn' => $this->key());
-        $berIdentifier = null;
+        $entry = ['dn' => $this->key()];
 
         $resource = $this->ldap->getResource();
         ErrorHandler::start();
-        $name = ldap_first_attribute(
-            $resource, $this->current,
-            $berIdentifier
-        );
+        $name = ldap_first_attribute($resource, $this->current);
         ErrorHandler::stop();
 
         while ($name) {
@@ -211,8 +247,8 @@ class DefaultIterator implements Iterator, Countable
             $data = ldap_get_values_len($resource, $this->current, $name);
             ErrorHandler::stop();
 
-            if (!$data) {
-                $data = array();
+            if (! $data) {
+                $data = [];
             }
 
             if (isset($data['count'])) {
@@ -236,10 +272,7 @@ class DefaultIterator implements Iterator, Countable
             $entry[$attrName] = $data;
 
             ErrorHandler::start();
-            $name = ldap_next_attribute(
-                $resource, $this->current,
-                $berIdentifier
-            );
+            $name = ldap_next_attribute($resource, $this->current);
             ErrorHandler::stop();
         }
         ksort($entry, SORT_LOCALE_STRING);
@@ -255,23 +288,24 @@ class DefaultIterator implements Iterator, Countable
      */
     public function key()
     {
-        if (!is_resource($this->current)) {
+        if (! Handler::isResultEntryHandle($this->current)) {
             $this->rewind();
         }
-        if (is_resource($this->current)) {
-            $resource = $this->ldap->getResource();
-            ErrorHandler::start();
-            $currentDn = ldap_get_dn($resource, $this->current);
-            ErrorHandler::stop();
 
-            if ($currentDn === false) {
-                throw new Exception\LdapException($this->ldap, 'getting dn');
-            }
-
-            return $currentDn;
-        } else {
+        if (! Handler::isResultEntryHandle($this->current)) {
             return null;
         }
+
+        $resource = $this->ldap->getResource();
+        ErrorHandler::start();
+        $currentDn = ldap_get_dn($resource, $this->current);
+        ErrorHandler::stop();
+
+        if ($currentDn === false) {
+            throw new Exception\LdapException($this->ldap, 'getting dn');
+        }
+
+        return $currentDn;
     }
 
     /**
@@ -282,25 +316,9 @@ class DefaultIterator implements Iterator, Countable
      */
     public function next()
     {
-        $code = 0;
-
-        if (is_resource($this->current) && $this->itemCount > 0) {
-            $resource = $this->ldap->getResource();
-            ErrorHandler::start();
-            $this->current = ldap_next_entry($resource, $this->current);
-            ErrorHandler::stop();
-            if ($this->current === false) {
-                $msg = $this->ldap->getLastError($code);
-                if ($code === Exception\LdapException::LDAP_SIZELIMIT_EXCEEDED) {
-                    // we have reached the size limit enforced by the server
-                    return;
-                } elseif ($code > Exception\LdapException::LDAP_SUCCESS) {
-                    throw new Exception\LdapException($this->ldap, 'getting next entry (' . $msg . ')');
-                }
-            }
-        } else {
-            $this->current = false;
-        }
+        next($this->entries);
+        $nextEntry     = current($this->entries);
+        $this->current = $nextEntry['resource'] ?? null;
     }
 
     /**
@@ -312,17 +330,9 @@ class DefaultIterator implements Iterator, Countable
      */
     public function rewind()
     {
-        if (is_resource($this->resultId)) {
-            $resource = $this->ldap->getResource();
-            ErrorHandler::start();
-            $this->current = ldap_first_entry($resource, $this->resultId);
-            ErrorHandler::stop();
-            if ($this->current === false
-                && $this->ldap->getLastErrorCode() > Exception\LdapException::LDAP_SUCCESS
-            ) {
-                throw new Exception\LdapException($this->ldap, 'getting first entry');
-            }
-        }
+        reset($this->entries);
+        $nextEntry     = current($this->entries);
+        $this->current = $nextEntry['resource'] ?? null;
     }
 
     /**
@@ -334,6 +344,41 @@ class DefaultIterator implements Iterator, Countable
      */
     public function valid()
     {
-        return (is_resource($this->current));
+        return Handler::isResultEntryHandle($this->current);
+    }
+
+    public function setSortFunction(callable $sortFunction)
+    {
+        $this->sortFunction = $sortFunction;
+
+        return $this;
+    }
+
+    public function sort($sortAttribute)
+    {
+        foreach ($this->entries as $key => $entry) {
+            $attributes = ldap_get_attributes(
+                $this->ldap->getResource(),
+                $entry['resource']
+            );
+
+            $attributes = array_change_key_case($attributes, CASE_LOWER);
+
+            if (isset($attributes[$sortAttribute][0])) {
+                $sortValue                        = (string) $attributes[$sortAttribute][0];
+                $this->entries[$key]['sortValue'] = $sortValue;
+            }
+        }
+
+        $sortFunction = $this->sortFunction;
+        $sorted       = usort(
+            $this->entries,
+            static fn($a, $b) =>
+            $sortFunction($a['sortValue'], $b['sortValue'])
+        );
+
+        if (! $sorted) {
+            throw new Exception\LdapException($this->ldap, 'sorting result-set');
+        }
     }
 }
